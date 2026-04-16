@@ -1,20 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Plus,
   Search,
-  Filter,
   LayoutGrid,
   List,
-  ArrowUpRight,
   Calendar,
   DollarSign,
   Users,
 } from 'lucide-react';
 import { dataStore } from '@/lib/mock-data';
-import type { ProjectStatus, PMPPhase } from '@/types/database';
+import { appEvents, PROJECT_CREATED, OPEN_NEW_PROJECT_MODAL } from '@/lib/events';
 
 const statusColors: Record<string, string> = {
   not_started: '#9ca3af',
@@ -44,6 +42,11 @@ export default function ProjectsPage() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [, setRefresh] = useState(0);
+
+  useEffect(() => {
+    return appEvents.on(PROJECT_CREATED, () => setRefresh(n => n + 1));
+  }, []);
 
   const projects = dataStore.getProjects().filter(p => {
     if (filterStatus !== 'all' && p.status !== filterStatus) return false;
@@ -62,6 +65,7 @@ export default function ProjectsPage() {
           </p>
         </div>
         <button
+          onClick={() => appEvents.emit(OPEN_NEW_PROJECT_MODAL)}
           style={{
             display: 'flex',
             alignItems: 'center',

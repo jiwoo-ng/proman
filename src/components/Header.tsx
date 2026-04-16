@@ -2,6 +2,7 @@
 
 import { Bell, Search, Plus, User } from 'lucide-react';
 import { useState } from 'react';
+import { appEvents, OPEN_NEW_PROJECT_MODAL } from '@/lib/events';
 
 export default function Header() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,6 +78,7 @@ export default function Header() {
             e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = '0 2px 8px rgba(22,163,74,0.3)';
           }}
+          onClick={() => appEvents.emit(OPEN_NEW_PROJECT_MODAL)}
         >
           <Plus size={18} />
           New Project

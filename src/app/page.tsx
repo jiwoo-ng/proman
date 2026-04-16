@@ -13,7 +13,9 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { dataStore } from '@/lib/mock-data';
+import { appEvents, PROJECT_CREATED } from '@/lib/events';
 
 const statusColors: Record<string, string> = {
   not_started: '#9ca3af',
@@ -40,6 +42,12 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function Dashboard() {
+  const [, setRefresh] = useState(0);
+
+  useEffect(() => {
+    return appEvents.on(PROJECT_CREATED, () => setRefresh(n => n + 1));
+  }, []);
+
   const projects = dataStore.getProjects();
   const tasks = dataStore.getAllTasks();
   const teamMembers = dataStore.getAllTeamMembers();
