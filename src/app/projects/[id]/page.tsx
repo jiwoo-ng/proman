@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { use, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -17,10 +17,14 @@ import {
   TrendingUp,
   BarChart3,
   Flag,
+  X,
+  Upload,
+  ChevronDown,
 } from 'lucide-react';
 import { dataStore } from '@/lib/mock-data';
 import { appEvents, DATA_CHANGED } from '@/lib/events';
-import type { TaskStatus, TaskPriority } from '@/types/database';
+import type { TaskStatus, TaskPriority, RiskLevel } from '@/types/database';
+import toast from 'react-hot-toast';
 
 const statusColors: Record<string, string> = {
   todo: '#9ca3af',
@@ -60,9 +64,87 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState('overview');
   const [, setRefresh] = useState(0);
 
+  // Task status dropdown
+  const [statusDropdownTaskId, setStatusDropdownTaskId] = useState<string | null>(null);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Risk modal
+  const [showRiskModal, setShowRiskModal] = useState(false);
+  const [riskForm, setRiskForm] = useState({ title: '', description: '', probability: 'medium' as RiskLevel, impact: 'medium' as RiskLevel, mitigation: '', owner_email: '' });
+
+  // File upload modal
+  const [showFileModal, setShowFileModal] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<globalThis.File[]>([]);
+  const [fileCategory, setFileCategory] = useState('General');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     return appEvents.on(DATA_CHANGED, () => setRefresh(n => n + 1));
   }, []);
+
+  // Close status dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+        setStatusDropdownTaskId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
+    dataStore.updateTask(taskId, { status: newStatus, completed_date: newStatus === 'done' ? new Date().toISOString().split('T')[0] : null });
+    // Recalculate project progress
+    const allTasks = dataStore.getTasksByProject(id);
+    const doneCount = allTasks.filter(t => (t.id === taskId ? newStatus : t.status) === 'done').length;
+    const progress = allTasks.length > 0 ? Math.round((doneCount / allTasks.length) * 100) : 0;
+    dataStore.updateProject(id, { progress });
+    setStatusDropdownTaskId(null);
+    toast.success(`Task status updated to ${statusLabels[newStatus]}`);
+  };
+
+  const handleAddRisk = () => {
+    if (!riskForm.title.trim()) { toast.error('Risk title is required'); return; }
+    if (!riskForm.description.trim()) { toast.error('Risk description is required'); return; }
+    dataStore.addRisk({
+      id: `r-${Date.now()}`,
+      project_id: id,
+      title: riskForm.title.trim(),
+      description: riskForm.description.trim(),
+      probability: riskForm.probability,
+      impact: riskForm.impact,
+      mitigation: riskForm.mitigation.trim(),
+      owner_email: riskForm.owner_email.trim() || project?.project_manager || '',
+      status: 'identified',
+      created_at: new Date().toISOString(),
+    });
+    setRiskForm({ title: '', description: '', probability: 'medium', impact: 'medium', mitigation: '', owner_email: '' });
+    setShowRiskModal(false);
+    toast.success('Risk added successfully');
+  };
+
+  const handleUploadFiles = () => {
+    if (pendingFiles.length === 0) { toast.error('Please select at least one file'); return; }
+    for (const file of pendingFiles) {
+      const ext = file.name.split('.').pop() || '';
+      dataStore.addFile({
+        id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        project_id: id,
+        name: file.name,
+        file_type: ext,
+        file_size: file.size,
+        file_url: URL.createObjectURL(file),
+        uploaded_by: project?.project_manager || 'unknown',
+        category: fileCategory,
+        created_at: new Date().toISOString(),
+      });
+    }
+    toast.success(`${pendingFiles.length} file${pendingFiles.length > 1 ? 's' : ''} uploaded`);
+    setPendingFiles([]);
+    setFileCategory('General');
+    setShowFileModal(false);
+  };
 
   const project = dataStore.getProject(id);
   const tasks = dataStore.getTasksByProject(id);
@@ -295,10 +377,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         <span style={{ fontSize: '13px', color: '#374151' }}>{task.assignee_name}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, background: statusColors[task.status] + '15', color: statusColors[task.status] }}>
+                    <td style={{ padding: '12px 16px', position: 'relative' }}>
+                      <button
+                        onClick={() => setStatusDropdownTaskId(statusDropdownTaskId === task.id ? null : task.id)}
+                        style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, background: statusColors[task.status] + '15', color: statusColors[task.status], border: '1px solid transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = statusColors[task.status]; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+                      >
                         {statusLabels[task.status]}
-                      </span>
+                        <ChevronDown size={12} />
+                      </button>
+                      {statusDropdownTaskId === task.id && (
+                        <div ref={statusDropdownRef} style={{ position: 'absolute', top: '100%', left: '12px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 20, minWidth: '140px', overflow: 'hidden' }}>
+                          {(Object.keys(statusLabels) as TaskStatus[]).map(s => (
+                            <button
+                              key={s}
+                              onClick={() => handleUpdateTaskStatus(task.id, s)}
+                              style={{ width: '100%', padding: '8px 14px', border: 'none', background: task.status === s ? '#f0fdf4' : 'white', textAlign: 'left', cursor: 'pointer', fontSize: '13px', color: statusColors[s], fontWeight: task.status === s ? 600 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = task.status === s ? '#f0fdf4' : 'white'; }}
+                            >
+                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: statusColors[s] }} />
+                              {statusLabels[s]}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, background: priorityColors[task.priority] + '15', color: priorityColors[task.priority], textTransform: 'capitalize' }}>
@@ -365,7 +469,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Project Documents</h3>
-            <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+            <button onClick={() => setShowFileModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
               <Plus size={16} /> Upload File
             </button>
           </div>
@@ -391,7 +495,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Risk Register</h3>
-            <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+            <button onClick={() => setShowRiskModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
               <Plus size={16} /> Add Risk
             </button>
           </div>
@@ -424,6 +528,128 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Add Risk Modal */}
+      {showRiskModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => setShowRiskModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
+          <div style={{ position: 'relative', background: 'white', borderRadius: '16px', width: '520px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 28px 20px', borderBottom: '1px solid #f3f4f6' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #f59e0b, #f97316)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Shield size={20} color="white" />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>Add Risk</h2>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Risk Register Entry</p>
+                </div>
+              </div>
+              <button onClick={() => setShowRiskModal(false)} style={{ padding: '8px', border: 'none', background: '#f3f4f6', borderRadius: '8px', cursor: 'pointer', display: 'flex' }}>
+                <X size={18} color="#6b7280" />
+              </button>
+            </div>
+            <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Risk Title <span style={{ color: '#ef4444' }}>*</span></label>
+                <input type="text" value={riskForm.title} onChange={e => setRiskForm({ ...riskForm, title: e.target.value })} placeholder="e.g., Scope Creep" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Description <span style={{ color: '#ef4444' }}>*</span></label>
+                <textarea value={riskForm.description} onChange={e => setRiskForm({ ...riskForm, description: e.target.value })} placeholder="Describe the risk..." rows={3} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Probability</label>
+                  <select value={riskForm.probability} onChange={e => setRiskForm({ ...riskForm, probability: e.target.value as RiskLevel })} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white' }}>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Impact</label>
+                  <select value={riskForm.impact} onChange={e => setRiskForm({ ...riskForm, impact: e.target.value as RiskLevel })} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white' }}>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Mitigation Strategy</label>
+                <textarea value={riskForm.mitigation} onChange={e => setRiskForm({ ...riskForm, mitigation: e.target.value })} placeholder="How will this risk be mitigated?" rows={2} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Owner Email</label>
+                <input type="email" value={riskForm.owner_email} onChange={e => setRiskForm({ ...riskForm, owner_email: e.target.value })} placeholder={project.project_manager} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 28px', borderTop: '1px solid #f3f4f6' }}>
+              <button onClick={() => setShowRiskModal(false)} style={{ padding: '10px 24px', border: '1px solid #e5e7eb', borderRadius: '10px', background: 'white', fontSize: '14px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleAddRisk} style={{ padding: '10px 28px', border: 'none', borderRadius: '10px', background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: 'white', fontSize: '14px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(22,163,74,0.3)' }}>Add Risk</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload File Modal */}
+      {showFileModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => { setShowFileModal(false); setPendingFiles([]); }} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
+          <div style={{ position: 'relative', background: 'white', borderRadius: '16px', width: '480px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 28px 20px', borderBottom: '1px solid #f3f4f6' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #16a34a, #22c55e)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Upload size={20} color="white" />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>Upload Files</h2>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Add documents to this project</p>
+                </div>
+              </div>
+              <button onClick={() => { setShowFileModal(false); setPendingFiles([]); }} style={{ padding: '8px', border: 'none', background: '#f3f4f6', borderRadius: '8px', cursor: 'pointer', display: 'flex' }}>
+                <X size={18} color="#6b7280" />
+              </button>
+            </div>
+            <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <input ref={fileInputRef} type="file" multiple onChange={e => { if (e.target.files) setPendingFiles(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value = ''; }} style={{ display: 'none' }} />
+              <button type="button" onClick={() => fileInputRef.current?.click()} style={{ width: '100%', padding: '28px', border: '2px dashed #d1d5db', borderRadius: '10px', background: '#fafafa', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#16a34a'; e.currentTarget.style.background = '#f0fdf4'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.background = '#fafafa'; }}>
+                <Upload size={28} color="#9ca3af" />
+                <span style={{ fontSize: '14px', color: '#6b7280', fontWeight: 500 }}>Click to select files</span>
+                <span style={{ fontSize: '12px', color: '#9ca3af' }}>PDF, DOCX, XLSX, images, and more</span>
+              </button>
+              {pendingFiles.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {pendingFiles.map((file, i) => (
+                    <div key={`${file.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: '#f9fafb', borderRadius: '8px', border: '1px solid #f3f4f6' }}>
+                      <FileText size={16} color="#6b7280" />
+                      <span style={{ flex: 1, fontSize: '13px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>{(file.size / 1024).toFixed(0)} KB</span>
+                      <button onClick={() => setPendingFiles(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#9ca3af', display: 'flex' }} onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; }} onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af'; }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Category</label>
+                <select value={fileCategory} onChange={e => setFileCategory(e.target.value)} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white' }}>
+                  {['General', 'Planning', 'Design', 'Technical', 'Finance', 'Reports', 'Legal'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 28px', borderTop: '1px solid #f3f4f6' }}>
+              <button onClick={() => { setShowFileModal(false); setPendingFiles([]); }} style={{ padding: '10px 24px', border: '1px solid #e5e7eb', borderRadius: '10px', background: 'white', fontSize: '14px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleUploadFiles} style={{ padding: '10px 28px', border: 'none', borderRadius: '10px', background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: 'white', fontSize: '14px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(22,163,74,0.3)' }}>Upload {pendingFiles.length > 0 ? `(${pendingFiles.length})` : ''}</button>
+            </div>
           </div>
         </div>
       )}
