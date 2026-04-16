@@ -297,58 +297,183 @@ export const mockCalendarEvents: CalendarEvent[] = [
   { id: 'e6', project_id: null, title: 'PMO Monthly Meeting', description: 'Monthly project management office review', start: '2026-04-22T15:00:00Z', end: '2026-04-22T16:30:00Z', type: 'meeting', attendees: ['sarah@company.com', 'john@company.com', 'mike@company.com'], location: 'Executive Room', google_event_id: null, created_at: '2026-04-01T00:00:00Z' },
 ];
 
-// Data store with CRUD operations
+// localStorage keys
+const STORAGE_KEYS = {
+  projects: 'pmp_projects',
+  tasks: 'pmp_tasks',
+  teamMembers: 'pmp_team_members',
+  files: 'pmp_files',
+  milestones: 'pmp_milestones',
+  risks: 'pmp_risks',
+  calendarEvents: 'pmp_calendar_events',
+} as const;
+
+function loadFromStorage<T>(key: string, fallback: T[]): T[] {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore parse errors */ }
+  return fallback;
+}
+
+function saveToStorage<T>(key: string, data: T[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch { /* ignore quota errors */ }
+}
+
+// Lazy import to avoid circular dependency at module level
+let _appEvents: typeof import('./events').appEvents | null = null;
+let _DATA_CHANGED: string | null = null;
+let _PROJECT_UPDATED: string | null = null;
+
+function getEvents() {
+  if (!_appEvents) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('./events');
+    _appEvents = mod.appEvents;
+    _DATA_CHANGED = mod.DATA_CHANGED;
+    _PROJECT_UPDATED = mod.PROJECT_UPDATED;
+  }
+  return { appEvents: _appEvents!, DATA_CHANGED: _DATA_CHANGED!, PROJECT_UPDATED: _PROJECT_UPDATED! };
+}
+
+// Data store with CRUD operations and localStorage persistence
 class DataStore {
-  projects: Project[] = [...mockProjects];
-  tasks: Task[] = [...mockTasks];
-  teamMembers: TeamMember[] = [...mockTeamMembers];
-  files: ProjectFile[] = [...mockFiles];
-  milestones: Milestone[] = [...mockMilestones];
-  risks: Risk[] = [...mockRisks];
-  calendarEvents: CalendarEvent[] = [...mockCalendarEvents];
+  projects: Project[];
+  tasks: Task[];
+  teamMembers: TeamMember[];
+  files: ProjectFile[];
+  milestones: Milestone[];
+  risks: Risk[];
+  calendarEvents: CalendarEvent[];
+
+  constructor() {
+    this.projects = loadFromStorage<Project>(STORAGE_KEYS.projects, mockProjects);
+    this.tasks = loadFromStorage<Task>(STORAGE_KEYS.tasks, mockTasks);
+    this.teamMembers = loadFromStorage<TeamMember>(STORAGE_KEYS.teamMembers, mockTeamMembers);
+    this.files = loadFromStorage<ProjectFile>(STORAGE_KEYS.files, mockFiles);
+    this.milestones = loadFromStorage<Milestone>(STORAGE_KEYS.milestones, mockMilestones);
+    this.risks = loadFromStorage<Risk>(STORAGE_KEYS.risks, mockRisks);
+    this.calendarEvents = loadFromStorage<CalendarEvent>(STORAGE_KEYS.calendarEvents, mockCalendarEvents);
+  }
+
+  private persistProjects() { saveToStorage(STORAGE_KEYS.projects, this.projects); }
+  private persistTasks() { saveToStorage(STORAGE_KEYS.tasks, this.tasks); }
+  private persistTeam() { saveToStorage(STORAGE_KEYS.teamMembers, this.teamMembers); }
+  private persistFiles() { saveToStorage(STORAGE_KEYS.files, this.files); }
+  private persistMilestones() { saveToStorage(STORAGE_KEYS.milestones, this.milestones); }
+  private persistRisks() { saveToStorage(STORAGE_KEYS.risks, this.risks); }
+  private persistEvents() { saveToStorage(STORAGE_KEYS.calendarEvents, this.calendarEvents); }
+
+  private emitDataChanged() {
+    try {
+      const { appEvents, DATA_CHANGED } = getEvents();
+      appEvents.emit(DATA_CHANGED);
+    } catch { /* events not ready yet */ }
+  }
+
+  private emitProjectUpdated() {
+    try {
+      const { appEvents, PROJECT_UPDATED } = getEvents();
+      appEvents.emit(PROJECT_UPDATED);
+    } catch { /* events not ready yet */ }
+  }
 
   // Projects
   getProjects() { return this.projects; }
   getProject(id: string) { return this.projects.find(p => p.id === id); }
-  addProject(project: Project) { this.projects.push(project); }
+  addProject(project: Project) {
+    project.created_at = new Date().toISOString();
+    project.updated_at = new Date().toISOString();
+    this.projects.push(project);
+    this.persistProjects();
+    this.emitDataChanged();
+  }
   updateProject(id: string, data: Partial<Project>) {
     const idx = this.projects.findIndex(p => p.id === id);
-    if (idx !== -1) this.projects[idx] = { ...this.projects[idx], ...data };
+    if (idx !== -1) {
+      this.projects[idx] = { ...this.projects[idx], ...data, updated_at: new Date().toISOString() };
+      this.persistProjects();
+      this.emitProjectUpdated();
+      this.emitDataChanged();
+    }
   }
 
   // Tasks
   getTasksByProject(projectId: string) { return this.tasks.filter(t => t.project_id === projectId); }
   getAllTasks() { return this.tasks; }
-  addTask(task: Task) { this.tasks.push(task); }
+  addTask(task: Task) {
+    this.tasks.push(task);
+    this.persistTasks();
+    this.emitDataChanged();
+  }
   updateTask(id: string, data: Partial<Task>) {
     const idx = this.tasks.findIndex(t => t.id === id);
-    if (idx !== -1) this.tasks[idx] = { ...this.tasks[idx], ...data };
+    if (idx !== -1) {
+      this.tasks[idx] = { ...this.tasks[idx], ...data, updated_at: new Date().toISOString() };
+      this.persistTasks();
+      this.emitDataChanged();
+    }
   }
 
   // Team
   getTeamByProject(projectId: string) { return this.teamMembers.filter(t => t.project_id === projectId); }
   getAllTeamMembers() { return this.teamMembers; }
-  addTeamMember(member: TeamMember) { this.teamMembers.push(member); }
-  removeTeamMember(id: string) { this.teamMembers = this.teamMembers.filter(t => t.id !== id); }
+  addTeamMember(member: TeamMember) {
+    this.teamMembers.push(member);
+    this.persistTeam();
+    this.emitDataChanged();
+  }
+  removeTeamMember(id: string) {
+    this.teamMembers = this.teamMembers.filter(t => t.id !== id);
+    this.persistTeam();
+    this.emitDataChanged();
+  }
 
   // Files
   getFilesByProject(projectId: string) { return this.files.filter(f => f.project_id === projectId); }
   getAllFiles() { return this.files; }
-  addFile(file: ProjectFile) { this.files.push(file); }
-  removeFile(id: string) { this.files = this.files.filter(f => f.id !== id); }
+  addFile(file: ProjectFile) {
+    this.files.push(file);
+    this.persistFiles();
+    this.emitDataChanged();
+  }
+  removeFile(id: string) {
+    this.files = this.files.filter(f => f.id !== id);
+    this.persistFiles();
+    this.emitDataChanged();
+  }
 
   // Milestones
   getMilestonesByProject(projectId: string) { return this.milestones.filter(m => m.project_id === projectId); }
-  addMilestone(milestone: Milestone) { this.milestones.push(milestone); }
+  addMilestone(milestone: Milestone) {
+    this.milestones.push(milestone);
+    this.persistMilestones();
+    this.emitDataChanged();
+  }
 
   // Risks
   getRisksByProject(projectId: string) { return this.risks.filter(r => r.project_id === projectId); }
-  addRisk(risk: Risk) { this.risks.push(risk); }
+  addRisk(risk: Risk) {
+    this.risks.push(risk);
+    this.persistRisks();
+    this.emitDataChanged();
+  }
 
   // Calendar
   getCalendarEvents() { return this.calendarEvents; }
   getEventsByProject(projectId: string) { return this.calendarEvents.filter(e => e.project_id === projectId); }
-  addEvent(event: CalendarEvent) { this.calendarEvents.push(event); }
+  addEvent(event: CalendarEvent) {
+    this.calendarEvents.push(event);
+    this.persistEvents();
+    this.emitDataChanged();
+  }
 }
 
 export const dataStore = new DataStore();

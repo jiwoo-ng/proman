@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -19,6 +19,7 @@ import {
   Flag,
 } from 'lucide-react';
 import { dataStore } from '@/lib/mock-data';
+import { appEvents, DATA_CHANGED } from '@/lib/events';
 import type { TaskStatus, TaskPriority } from '@/types/database';
 
 const statusColors: Record<string, string> = {
@@ -57,6 +58,11 @@ const phaseSteps = ['initiating', 'planning', 'executing', 'monitoring_controlli
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [activeTab, setActiveTab] = useState('overview');
+  const [, setRefresh] = useState(0);
+
+  useEffect(() => {
+    return appEvents.on(DATA_CHANGED, () => setRefresh(n => n + 1));
+  }, []);
 
   const project = dataStore.getProject(id);
   const tasks = dataStore.getTasksByProject(id);

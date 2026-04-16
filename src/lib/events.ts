@@ -17,4 +17,6 @@ export const appEvents = {
 };
 
 export const PROJECT_CREATED = 'project:created';
+export const PROJECT_UPDATED = 'project:updated';
+export const DATA_CHANGED = 'data:changed';
 export const OPEN_NEW_PROJECT_MODAL = 'modal:new-project';

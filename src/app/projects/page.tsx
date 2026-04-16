@@ -12,7 +12,7 @@ import {
   Users,
 } from 'lucide-react';
 import { dataStore } from '@/lib/mock-data';
-import { appEvents, PROJECT_CREATED, OPEN_NEW_PROJECT_MODAL } from '@/lib/events';
+import { appEvents, PROJECT_CREATED, PROJECT_UPDATED, DATA_CHANGED, OPEN_NEW_PROJECT_MODAL } from '@/lib/events';
 
 const statusColors: Record<string, string> = {
   not_started: '#9ca3af',
@@ -45,7 +45,10 @@ export default function ProjectsPage() {
   const [, setRefresh] = useState(0);
 
   useEffect(() => {
-    return appEvents.on(PROJECT_CREATED, () => setRefresh(n => n + 1));
+    const unsub1 = appEvents.on(PROJECT_CREATED, () => setRefresh(n => n + 1));
+    const unsub2 = appEvents.on(PROJECT_UPDATED, () => setRefresh(n => n + 1));
+    const unsub3 = appEvents.on(DATA_CHANGED, () => setRefresh(n => n + 1));
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
 
   const projects = dataStore.getProjects().filter(p => {
