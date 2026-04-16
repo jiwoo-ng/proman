@@ -66,6 +66,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   // Task status dropdown
   const [statusDropdownTaskId, setStatusDropdownTaskId] = useState<string | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
 
   // Risk modal
@@ -87,6 +88,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const handler = (e: MouseEvent) => {
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
         setStatusDropdownTaskId(null);
+        setDropdownPos(null);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -101,6 +103,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const progress = allTasks.length > 0 ? Math.round((doneCount / allTasks.length) * 100) : 0;
     dataStore.updateProject(id, { progress });
     setStatusDropdownTaskId(null);
+    setDropdownPos(null);
     toast.success(`Task status updated to ${statusLabels[newStatus]}`);
   };
 
@@ -377,9 +380,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         <span style={{ fontSize: '13px', color: '#374151' }}>{task.assignee_name}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '12px 16px', position: 'relative' }}>
+                    <td style={{ padding: '12px 16px' }}>
                       <button
-                        onClick={() => setStatusDropdownTaskId(statusDropdownTaskId === task.id ? null : task.id)}
+                        onClick={(e) => {
+                          if (statusDropdownTaskId === task.id) {
+                            setStatusDropdownTaskId(null);
+                            setDropdownPos(null);
+                          } else {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+                            setStatusDropdownTaskId(task.id);
+                          }
+                        }}
                         style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, background: statusColors[task.status] + '15', color: statusColors[task.status], border: '1px solid transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                         onMouseEnter={(e) => { e.currentTarget.style.borderColor = statusColors[task.status]; }}
                         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
@@ -387,22 +399,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         {statusLabels[task.status]}
                         <ChevronDown size={12} />
                       </button>
-                      {statusDropdownTaskId === task.id && (
-                        <div ref={statusDropdownRef} style={{ position: 'absolute', top: '100%', left: '12px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 20, minWidth: '140px', overflow: 'hidden' }}>
-                          {(Object.keys(statusLabels) as TaskStatus[]).map(s => (
-                            <button
-                              key={s}
-                              onClick={() => handleUpdateTaskStatus(task.id, s)}
-                              style={{ width: '100%', padding: '8px 14px', border: 'none', background: task.status === s ? '#f0fdf4' : 'white', textAlign: 'left', cursor: 'pointer', fontSize: '13px', color: statusColors[s], fontWeight: task.status === s ? 600 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = task.status === s ? '#f0fdf4' : 'white'; }}
-                            >
-                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: statusColors[s] }} />
-                              {statusLabels[s]}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, background: priorityColors[task.priority] + '15', color: priorityColors[task.priority], textTransform: 'capitalize' }}>
@@ -529,6 +525,28 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Task Status Dropdown (fixed position to avoid overflow clipping) */}
+      {statusDropdownTaskId && dropdownPos && (
+        <div ref={statusDropdownRef} style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50, minWidth: '150px', overflow: 'hidden' }}>
+          {(Object.keys(statusLabels) as TaskStatus[]).map(s => {
+            const currentTask = tasks.find(t => t.id === statusDropdownTaskId);
+            const isActive = currentTask?.status === s;
+            return (
+              <button
+                key={s}
+                onClick={() => handleUpdateTaskStatus(statusDropdownTaskId, s)}
+                style={{ width: '100%', padding: '8px 14px', border: 'none', background: isActive ? '#f0fdf4' : 'white', textAlign: 'left', cursor: 'pointer', fontSize: '13px', color: statusColors[s], fontWeight: isActive ? 600 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? '#f0fdf4' : 'white'; }}
+              >
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: statusColors[s] }} />
+                {statusLabels[s]}
+              </button>
+            );
+          })}
         </div>
       )}
 
