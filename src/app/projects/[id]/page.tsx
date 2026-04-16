@@ -388,7 +388,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             setDropdownPos(null);
                           } else {
                             const rect = e.currentTarget.getBoundingClientRect();
-                            setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+                            const dropdownHeight = 5 * 36; // 5 status options ~36px each
+                            const spaceBelow = window.innerHeight - rect.bottom;
+                            const top = spaceBelow < dropdownHeight ? rect.top - dropdownHeight - 4 : rect.bottom + 4;
+                            setDropdownPos({ top, left: rect.left });
                             setStatusDropdownTaskId(task.id);
                           }
                         }}
