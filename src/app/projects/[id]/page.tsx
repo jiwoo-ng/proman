@@ -73,6 +73,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [riskForm, setRiskForm] = useState({ title: '', description: '', probability: 'medium' as RiskLevel, impact: 'medium' as RiskLevel, mitigation: '', owner_email: '' });
 
+  // Task modal
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'medium' as TaskPriority, assignee_name: '', assignee_email: '', due_date: '', estimated_hours: '' });
+
   // File upload modal
   const [showFileModal, setShowFileModal] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<globalThis.File[]>([]);
@@ -125,6 +129,38 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setRiskForm({ title: '', description: '', probability: 'medium', impact: 'medium', mitigation: '', owner_email: '' });
     setShowRiskModal(false);
     toast.success('Risk added successfully');
+  };
+
+  const handleAddTask = () => {
+    if (!taskForm.title.trim()) { toast.error('Task title is required'); return; }
+    if (!taskForm.assignee_name.trim()) { toast.error('Assignee name is required'); return; }
+    if (!taskForm.due_date) { toast.error('Due date is required'); return; }
+    const wbsIndex = tasks.length + 1;
+    const wbsCode = `${wbsIndex.toString().padStart(2, '0')}.0`;
+    const now = new Date().toISOString();
+    dataStore.addTask({
+      id: `t-${Date.now()}`,
+      project_id: id,
+      title: taskForm.title.trim(),
+      description: taskForm.description.trim() || 'No description',
+      status: 'todo',
+      priority: taskForm.priority,
+      assignee_email: taskForm.assignee_email.trim() || '',
+      assignee_name: taskForm.assignee_name.trim(),
+      start_date: now.split('T')[0],
+      due_date: taskForm.due_date,
+      completed_date: null,
+      estimated_hours: Number(taskForm.estimated_hours) || 0,
+      actual_hours: 0,
+      wbs_code: wbsCode,
+      dependencies: [],
+      tags: [],
+      created_at: now,
+      updated_at: now,
+    });
+    setTaskForm({ title: '', description: '', priority: 'medium', assignee_name: '', assignee_email: '', due_date: '', estimated_hours: '' });
+    setShowTaskModal(false);
+    toast.success('Task added successfully');
   };
 
   const handleUploadFiles = () => {
@@ -351,7 +387,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Work Breakdown Structure (WBS)</h3>
-            <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+            <button onClick={() => setShowTaskModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
               <Plus size={16} /> Add Task
             </button>
           </div>
@@ -613,6 +649,72 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 28px', borderTop: '1px solid #f3f4f6' }}>
               <button onClick={() => setShowRiskModal(false)} style={{ padding: '10px 24px', border: '1px solid #e5e7eb', borderRadius: '10px', background: 'white', fontSize: '14px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}>Cancel</button>
               <button onClick={handleAddRisk} style={{ padding: '10px 28px', border: 'none', borderRadius: '10px', background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: 'white', fontSize: '14px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(22,163,74,0.3)' }}>Add Risk</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Task Modal */}
+      {showTaskModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => setShowTaskModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
+          <div style={{ position: 'relative', background: 'white', borderRadius: '16px', width: '520px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 28px 20px', borderBottom: '1px solid #f3f4f6' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #16a34a, #22c55e)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CheckCircle2 size={20} color="white" />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>Add Task</h2>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Work Breakdown Structure</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTaskModal(false)} style={{ padding: '8px', border: 'none', background: '#f3f4f6', borderRadius: '8px', cursor: 'pointer', display: 'flex' }}>
+                <X size={18} color="#6b7280" />
+              </button>
+            </div>
+            <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Task Title <span style={{ color: '#ef4444' }}>*</span></label>
+                <input type="text" value={taskForm.title} onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="e.g., Design wireframes" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Description</label>
+                <textarea value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Describe the task..." rows={3} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Assignee Name <span style={{ color: '#ef4444' }}>*</span></label>
+                  <input type="text" value={taskForm.assignee_name} onChange={e => setTaskForm({ ...taskForm, assignee_name: e.target.value })} placeholder="John Doe" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Assignee Email</label>
+                  <input type="email" value={taskForm.assignee_email} onChange={e => setTaskForm({ ...taskForm, assignee_email: e.target.value })} placeholder="john@example.com" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Priority</label>
+                  <select value={taskForm.priority} onChange={e => setTaskForm({ ...taskForm, priority: e.target.value as TaskPriority })} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white' }}>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Due Date <span style={{ color: '#ef4444' }}>*</span></label>
+                  <input type="date" value={taskForm.due_date} onChange={e => setTaskForm({ ...taskForm, due_date: e.target.value })} style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Estimated Hours</label>
+                <input type="number" value={taskForm.estimated_hours} onChange={e => setTaskForm({ ...taskForm, estimated_hours: e.target.value })} placeholder="8" min="0" style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.target.style.borderColor = '#16a34a'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 28px', borderTop: '1px solid #f3f4f6' }}>
+              <button onClick={() => setShowTaskModal(false)} style={{ padding: '10px 24px', border: '1px solid #e5e7eb', borderRadius: '10px', background: 'white', fontSize: '14px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleAddTask} style={{ padding: '10px 28px', border: 'none', borderRadius: '10px', background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: 'white', fontSize: '14px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(22,163,74,0.3)' }}>Add Task</button>
             </div>
           </div>
         </div>
