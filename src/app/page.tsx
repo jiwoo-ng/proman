@@ -71,6 +71,7 @@ export default function Dashboard() {
       bg: '#f0fdf4',
       trend: '+2 this month',
       trendUp: true,
+      href: '/projects',
     },
     {
       title: 'Tasks Completed',
@@ -81,6 +82,7 @@ export default function Dashboard() {
       bg: '#eff6ff',
       trend: '+5 this week',
       trendUp: true,
+      href: '/projects',
     },
     {
       title: 'Budget Utilization',
@@ -91,6 +93,7 @@ export default function Dashboard() {
       bg: '#fffbeb',
       trend: 'On track',
       trendUp: true,
+      href: '/projects',
     },
     {
       title: 'Overdue Tasks',
@@ -101,6 +104,7 @@ export default function Dashboard() {
       bg: '#fef2f2',
       trend: overdueTasks > 0 ? 'Action needed' : 'All on track',
       trendUp: overdueTasks === 0,
+      href: '/risks',
     },
   ];
 
@@ -126,54 +130,60 @@ export default function Dashboard() {
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
-            <div
+            <Link
               key={kpi.title}
-              className="hover-lift"
-              style={{
-                background: 'white',
-                borderRadius: '14px',
-                padding: '24px',
-                border: '1px solid #e5e7eb',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
+              href={kpi.href}
+              style={{ textDecoration: 'none', color: 'inherit' }}
             >
-              <div style={{ position: 'absolute', top: 0, right: 0, width: '100px', height: '100px', background: kpi.bg, borderRadius: '0 0 0 100px', opacity: 0.5 }} />
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div
-                  style={{
-                    width: '44px',
-                    height: '44px',
-                    background: kpi.bg,
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Icon size={22} color={kpi.color} />
+              <div
+                className="hover-lift"
+                style={{
+                  background: 'white',
+                  borderRadius: '14px',
+                  padding: '24px',
+                  border: '1px solid #e5e7eb',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ position: 'absolute', top: 0, right: 0, width: '100px', height: '100px', background: kpi.bg, borderRadius: '0 0 0 100px', opacity: 0.5 }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      background: kpi.bg,
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon size={22} color={kpi.color} />
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '12px',
+                      color: kpi.trendUp ? '#16a34a' : '#ef4444',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {kpi.trendUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                    {kpi.trend}
+                  </div>
                 </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: kpi.trendUp ? '#16a34a' : '#ef4444',
-                    fontWeight: 500,
-                  }}
-                >
-                  {kpi.trendUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                  {kpi.trend}
+                <div style={{ fontSize: '30px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>
+                  {kpi.value}
+                </div>
+                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '6px' }}>
+                  {kpi.subtitle}
                 </div>
               </div>
-              <div style={{ fontSize: '30px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>
-                {kpi.value}
-              </div>
-              <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '6px' }}>
-                {kpi.subtitle}
-              </div>
-            </div>
+            </Link>
           );
         })}
       </div>
@@ -199,7 +209,7 @@ export default function Dashboard() {
             </Link>
           </div>
           <div>
-            {projects.slice(0, 4).map((project) => (
+            {[...projects].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 4).map((project) => (
               <Link
                 key={project.id}
                 href={`/projects/${project.id}`}
